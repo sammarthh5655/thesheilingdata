@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { ADMIN_PATH } from './config.js'
 import { useAuth } from './context/AuthContext.jsx'
 import Layout from './components/Layout.jsx'
@@ -51,27 +52,30 @@ export default function App() {
   if (isBanned) return <SuspendedScreen />
 
   return (
-    <Routes>
-      {/* Hidden admin routes — deliberately outside the public layout. */}
-      <Route path={`/${ADMIN_PATH}/login`} element={<AdminLogin />} />
-      <Route path={`/${ADMIN_PATH}/dashboard`} element={<AdminDashboard />} />
+    <>
+      <Routes>
+        {/* Hidden admin routes — deliberately outside the public layout. */}
+        <Route path={`/${ADMIN_PATH}/login`} element={<AdminLogin />} />
+        <Route path={`/${ADMIN_PATH}/dashboard`} element={<AdminDashboard />} />
 
-      <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/classes" element={<Protected><Classes /></Protected>} />
-        <Route path="/classes/:classNumber" element={<Protected><ClassPage /></Protected>} />
-        <Route path="/classes/:classNumber/:subjectSlug" element={<Protected><SubjectPage /></Protected>} />
-        <Route path="/file/:fileId" element={<Protected><FilePage /></Protected>} />
-        <Route path="/search" element={<Protected><SearchPage /></Protected>} />
-        <Route path="/bookmarks" element={<Protected><Bookmarks /></Protected>} />
-        <Route path="/profile" element={<Protected><Profile /></Protected>} />
-        <Route path="/teacher/:teacherId" element={<Protected><TeacherProfile /></Protected>} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/classes" element={<Protected><Classes /></Protected>} />
+          <Route path="/classes/:classNumber" element={<Protected><ClassPage /></Protected>} />
+          <Route path="/classes/:classNumber/:subjectSlug" element={<Protected><SubjectPage /></Protected>} />
+          <Route path="/file/:fileId" element={<Protected><FilePage /></Protected>} />
+          <Route path="/search" element={<Protected><SearchPage /></Protected>} />
+          <Route path="/bookmarks" element={<Protected><Bookmarks /></Protected>} />
+          <Route path="/profile" element={<Protected><Profile /></Protected>} />
+          <Route path="/teacher/:teacherId" element={<Protected><TeacherProfile /></Protected>} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+      <Analytics />
+    </>
   )
 }
