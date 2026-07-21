@@ -1,0 +1,97 @@
+rules_version = '2';
+
+// TheSheilingData — Firestore security rules.
+// Deploy: Firebase console → Firestore → Rules, or `firebase deploy --only firestore:rules`
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return signedIn() && me().role == 'admin' && me().status == 'active';
+    }
+
+    function isUploader() {
+      return signedIn()
+        && (me().role == 'teacher' || me().role == 'admin')
+        && me().status == 'active';
+    }
+
+    // users/{userId}
+    match /users/{userId} {
+      // Individual profiles are readable by signed-in users (needed for
+      // teacher pages and uploader names). Full listing is admin-only.
+      allow get: if signedIn();
+      allow list: if isAdmin();
+
+      // Signup: a user may create only their own doc, always as an active student.
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'student'
+        && request.resource.data.status == 'active';
+
+      // Self-service updates may not touch role or status; admins may change anything.
+      allow update: if isAdmin()
+        || (signedIn()
+            && request.auth.uid == userId
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['role', 'status', 'email', 'createdAt']));
+
+      allow delete: if isAdmin();
+    }
+
+    // loginLogs/{logId} — append-only; readable only by admins.
+    match /loginLogs/{logId} {
+      allow read: if isAdmin();
+      // Successful events must belong to the caller; failed attempts may be
+      // recorded pre-auth (success must be false).
+      allow create: if (signedIn() && request.resource.data.userId == request.auth.uid)
+        || request.resource.data.success == false;
+      allow update, delete: if false;
+    }
+
+    // files/{fileId}
+    match /files/{fileId} {
+      allow read: if signedIn();
+
+      allow create: if isUploader()
+        && request.resource.data.uploadedByUserId == request.auth.uid
+        && request.resource.data.viewCount == 0
+        && request.resource.data.downloadCount == 0;
+
+      // Signed-in users may only bump the counters; admins may edit anything (move).
+      allow update: if isAdmin()
+        || (signedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['viewCount', 'downloadCount']));
+
+      allow delete: if isAdmin();
+    }
+
+    // bookmarks/{userId}/items/{fileId} — private to each user.
+    match /bookmarks/{userId}/items/{fileId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    // reports/{reportId}
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.reportedByUserId == request.auth.uid
+        && request.resource.data.status == 'open';
+      allow read, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // adminAuditLog/{logId} — append-only, admin-only.
+    match /adminAuditLog/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// TheSheilingData — Firebase Storage security rules.
+// Deploy: Firebase console → Storage → Rules, or `firebase deploy --only storage`
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isUploader() {
+      return request.auth != null
+        && (userDoc().role == 'teacher' || userDoc().role == 'admin')
+        && userDoc().status == 'active';
+    }
+
+    function isAdmin() {
+      return request.auth != null
+        && userDoc().role == 'admin'
+        && userDoc().status == 'active';
+    }
+
+    // worksheets/class-{n}/{subject-slug}/{file}
+    match /worksheets/{classFolder}/{subjectFolder}/{fileName} {
+      allow read: if request.auth != null;
+      allow create: if isUploader()
+        && request.resource.size < 25 * 1024 * 1024;
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+  }
+}
