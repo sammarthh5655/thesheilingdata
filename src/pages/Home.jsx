@@ -17,6 +17,7 @@ export default function Home() {
           study material — arranged by class, subject, and chapter, uploaded by
           your own teachers.
         </p>
+        <p style={{ marginTop: '1rem', fontSize: '0.95rem', opacity: 0.9 }}>Created by Sammarth Khandelwal</p>
         <div className="hero-actions">
           {isSignedIn ? (
             <Link to="/classes" className="btn btn-primary">Browse classes</Link>
@@ -57,10 +58,6 @@ export default function Home() {
           <h3>Open or save</h3>
           <p>Preview files right in the browser, download them for later, and bookmark your favourites.</p>
         </div>
-      </div>
-
-      <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid var(--color-border)', textAlign: 'center', opacity: 0.8 }}>
-        <p style={{ fontSize: '0.9rem' }}>Created by Sammarth Khandelwal</p>
       </div>
     </>
   )
