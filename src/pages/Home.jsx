@@ -17,7 +17,7 @@ export default function Home() {
           study material — arranged by class, subject, and chapter, uploaded by
           your own teachers.
         </p>
-        <p style={{ marginTop: '1rem', fontSize: '0.95rem', opacity: 0.9 }}>Created by Sammarth Khandelwal</p>
+        <p style={{ marginTop: '1rem', fontSize: '0.95rem', opacity: 0.9 }}>Created by Samarth Khandelwal</p>
         <div className="hero-actions">
           {isSignedIn ? (
             <Link to="/classes" className="btn btn-primary">Browse classes</Link>

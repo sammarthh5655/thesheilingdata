@@ -111,6 +111,10 @@ export default function Layout() {
         >
           TheSheilingData — worksheets &amp; study material for classes 6–10.
         </div>
+        <div className="footer-contact" style={{ marginTop: '0.5rem', fontSize: '0.9rem', opacity: 0.85 }}>
+          Found a bug or a problem with the site?{' '}
+          <a href="mailto:sammarth025@gmail.com">sammarth025@gmail.com</a>
+        </div>
       </footer>
     </>
   )
