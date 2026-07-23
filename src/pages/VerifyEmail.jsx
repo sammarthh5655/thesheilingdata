@@ -13,9 +13,12 @@ export default function VerifyEmail() {
   if (!isSignedIn) {
     return (
       <div className="auth-card">
-        <h1>Verify your email</h1>
-        <p className="sub">Sign in first, then verify your email address.</p>
-        <Link to="/login" className="btn btn-primary btn-block">Sign in</Link>
+        <h1>Check your email</h1>
+        <p className="sub">
+          We've sent a confirmation link to your email address. Click it to
+          verify your account, then sign in.
+        </p>
+        <Link to="/login" className="btn btn-primary btn-block">Go to sign in</Link>
       </div>
     )
   }

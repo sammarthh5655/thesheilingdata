@@ -78,13 +78,28 @@ export const supabaseBackend = {
     const emit = async (session) => {
       if (cancelled) return
       if (!session?.user) { cb(null); return }
-      let profile = await fetchProfile(session.user.id)
-      // Keep verified flag in step with Supabase's email confirmation.
-      if (profile && session.user.email_confirmed_at && !profile.verified) {
-        await sb.from('users').update({ verified: true }).eq('id', session.user.id)
+      const u = session.user
+      let profile = await fetchProfile(u.id)
+      if (!profile) {
+        // First authenticated appearance after signup (email confirmation ON
+        // gives no session at signup, so the row couldn't be inserted then —
+        // and RLS blocks an anon insert). Now that auth.uid() is set, create
+        // it. This also self-heals accounts whose profile insert failed before.
+        const name =
+          (u.user_metadata && u.user_metadata.name) ||
+          (u.email ? u.email.split('@')[0] : 'Student')
+        const { error } = await sb.from('users').insert({
+          id: u.id, email: u.email, name, role: 'student', status: 'active',
+          verified: !!u.email_confirmed_at, last_login_at: new Date().toISOString(),
+        })
+        if (error) console.warn('profile ensure failed', error)
+        profile = await fetchProfile(u.id)
+      } else if (u.email_confirmed_at && !profile.verified) {
+        // Keep verified flag in step with Supabase's email confirmation.
+        await sb.from('users').update({ verified: true }).eq('id', u.id)
         profile = { ...profile, verified: true }
       }
-      cb({ uid: session.user.id, profile })
+      cb({ uid: u.id, profile })
     }
     sb.auth.getSession().then(({ data }) => emit(data.session))
     const { data: sub } = sb.auth.onAuthStateChange((_e, session) => emit(session))
@@ -97,17 +112,26 @@ export const supabaseBackend = {
 
   async signUp({ name, email, password }) {
     email = email.trim().toLowerCase()
-    const { data, error } = await sb.auth.signUp({ email, password })
+    // Stash the name in user_metadata so onAuth() can create the profile row
+    // on first sign-in even when email confirmation is on (no session yet).
+    const { data, error } = await sb.auth.signUp({
+      email, password, options: { data: { name: name.trim() } },
+    })
     if (error) {
       await logEvent({ email, type: 'signup', success: false })
       throw new Error(error.message)
     }
     const uid = data.user.id
-    const { error: pErr } = await sb.from('users').insert({
-      id: uid, email, name: name.trim(), role: 'student', status: 'active',
-      verified: !!data.user.email_confirmed_at, last_login_at: new Date().toISOString(),
-    })
-    if (pErr) console.warn('profile insert', pErr)
+    // Only insert now if confirmation is OFF (a session exists). With
+    // confirmation ON there is no session and RLS would reject an anon insert;
+    // onAuth() creates the row when the user first signs in instead.
+    if (data.session) {
+      const { error: pErr } = await sb.from('users').insert({
+        id: uid, email, name: name.trim(), role: 'student', status: 'active',
+        verified: !!data.user.email_confirmed_at, last_login_at: new Date().toISOString(),
+      })
+      if (pErr) console.warn('profile insert', pErr)
+    }
     await logEvent({ userId: uid, email, type: 'signup', success: true })
   },
 
@@ -138,7 +162,7 @@ export const supabaseBackend = {
 
   async resetPassword(email) {
     const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/reset-password`,
     })
     if (error) throw new Error(error.message)
   },

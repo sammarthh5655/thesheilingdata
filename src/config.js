@@ -42,15 +42,14 @@ export const subjectFromSlug = (classNum, slug) =>
   (CLASSES[classNum] || []).find((s) => slugify(s) === slug) || null
 
 // ---------------------------------------------------------------------------
-// Admin panel — hidden route + second credential gate.
-//
-// The admin dashboard lives under /`ADMIN_PATH`/login and /`ADMIN_PATH`/dashboard.
-// It is never linked from site navigation. Change ADMIN_PATH to any private
-// string before deploying.
+// Admin panel — reachable at /`ADMIN_PATH`/login and /`ADMIN_PATH`/dashboard,
+// or via the secret footer gesture (5 quick taps). It is never linked from
+// site navigation. The real protection is the credential gate below plus the
+// admin role, so a simple path like "admin" is fine.
 //
 // ADMIN_ID_SHA256 / ADMIN_PASS_SHA256 are SHA-256 hex digests of the admin
-// panel ID and password (checked on top of normal Firebase authentication —
-// in Firebase mode the signed-in account must ALSO have role "admin").
+// panel ID and password (checked on top of normal authentication — in
+// Supabase/Firebase mode the signed-in account must ALSO have role "admin").
 //
 // Defaults (CHANGE BEFORE DEPLOYING — see README):
 //   ID: registrar     Password: change-me-now
@@ -58,7 +57,7 @@ export const subjectFromSlug = (classNum, slug) =>
 //   crypto.subtle.digest('SHA-256', new TextEncoder().encode('your-secret'))
 //     .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('')))
 // ---------------------------------------------------------------------------
-export const ADMIN_PATH = 'admin-7x9k2m'
+export const ADMIN_PATH = 'admin'
 export const ADMIN_ID_SHA256 =
   'c1c224b03cd9bc7b6a86d77f5dace40191766c485cd55dc48caf9ac873335d6f'
 export const ADMIN_PASS_SHA256 =

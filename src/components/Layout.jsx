@@ -1,19 +1,38 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { backend } from '../backend/index.js'
+import { ADMIN_PATH } from '../config.js'
+
+// Secret admin entrance: 5 taps on the footer within 2s opens the panel gate.
+const SECRET_TAPS = 5
+const SECRET_WINDOW_MS = 2000
 
 export default function Layout() {
   const { isSignedIn, isVerified, user } = useAuth()
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
   const [q, setQ] = useState('')
+  const tapRef = useRef({ count: 0, last: 0 })
 
   const onSearch = (e) => {
     e.preventDefault()
     const query = q.trim()
     if (query) navigate(`/search?q=${encodeURIComponent(query)}`)
+  }
+
+  // Hidden gesture — no visual hint. Taps must come in quick succession;
+  // any pause longer than the window resets the counter.
+  const secretTap = () => {
+    const now = Date.now()
+    const t = tapRef.current
+    t.count = now - t.last > SECRET_WINDOW_MS ? 1 : t.count + 1
+    t.last = now
+    if (t.count >= SECRET_TAPS) {
+      t.count = 0
+      navigate(`/${ADMIN_PATH}/login`)
+    }
   }
 
   return (
@@ -75,7 +94,7 @@ export default function Layout() {
         <div className="banner" role="note">
           <span>
             Running in <b>local preview mode</b> — data stays in this browser.
-            Paste your Firebase config in <code>src/firebase-config.js</code> to go live.
+            Add your Supabase (or Firebase) config to go live.
           </span>
         </div>
       )}
@@ -86,7 +105,12 @@ export default function Layout() {
 
       <footer className="site-footer">
         <div className="rule" aria-hidden="true" />
-        <div>TheSheilingData — worksheets &amp; study material for classes 6–10.</div>
+        <div
+          onClick={secretTap}
+          style={{ cursor: 'default', userSelect: 'none' }}
+        >
+          TheSheilingData — worksheets &amp; study material for classes 6–10.
+        </div>
       </footer>
     </>
   )

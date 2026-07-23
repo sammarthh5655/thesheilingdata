@@ -42,10 +42,16 @@ before real use.
 ### Secure the admin panel (required before go-live)
 
 The admin panel lives at a hidden route, protected by a second ID + password
-check on top of Firebase auth. In [`src/config.js`](src/config.js) change:
+check on top of your normal account sign-in. You can reach the panel two ways:
 
-- `ADMIN_PATH` — the secret URL segment. Default `atrium-9x2k7` →
-  panel at `/atrium-9x2k7/login`. Pick your own private string.
+- **URL** — `/admin/login` (the `ADMIN_PATH` segment, default `admin`).
+- **Secret gesture** — click the footer text **5 times within 2 seconds** on
+  any page. No link to it appears anywhere in the navigation.
+
+In [`src/config.js`](src/config.js) change:
+
+- `ADMIN_PATH` — the URL segment for the panel (default `admin` →
+  `/admin/login`). Pick a less-guessable string if you want more obscurity.
 - `ADMIN_ID_SHA256` / `ADMIN_PASS_SHA256` — SHA-256 digests of the admin ID
   and password. **Shipped defaults are `registrar` / `change-me-now` — change
   them.** Generate a digest in any browser console:
@@ -57,7 +63,7 @@ check on top of Firebase auth. In [`src/config.js`](src/config.js) change:
 
 The dashboard shows a red warning until the defaults are replaced. Note the
 panel gate is a client-side deterrent + obscurity layer; the real enforcement
-is the Firestore/Storage rules requiring `role == 'admin'`.
+is the database/storage rules requiring `role == 'admin'`.
 
 ## Deploying
 
