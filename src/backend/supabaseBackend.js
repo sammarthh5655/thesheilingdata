@@ -40,8 +40,11 @@ function normFile(r) {
   if (!r) return null
   return {
     id: r.id, classNum: r.class_num, subject: r.subject, chapter: r.chapter,
+    category: r.category || 'worksheet', paperYear: r.paper_year || null,
     fileName: r.file_name, fileType: r.file_type, size: r.size,
     storagePath: r.storage_path, storageUrl: null,
+    examType: r.exam_type || null, worksheetNo: r.worksheet_no || null,
+    pageCount: r.page_count || 1, pages: Array.isArray(r.pages) ? r.pages : null,
     uploadedByUserId: r.uploaded_by_user_id, uploaderName: r.uploader_name,
     uploadedAt: ms(r.created_at), viewCount: r.view_count, downloadCount: r.download_count,
   }
@@ -108,6 +111,13 @@ export const supabaseBackend = {
 
   async refreshAuth() {
     await sb.auth.refreshSession()
+  },
+
+  // Supabase access token — sent to the AI endpoint so it can verify the
+  // caller is a signed-in user before spending API credits.
+  async getAccessToken() {
+    const { data } = await sb.auth.getSession()
+    return data.session?.access_token || null
   },
 
   async signUp({ name, email, password }) {
@@ -230,27 +240,55 @@ export const supabaseBackend = {
   },
 
   // --- Files ---------------------------------------------------------------
-  async uploadFile({ classNum, subject, chapter, file, user, fileType }) {
-    const path = `class-${classNum}/${slugify(subject)}/${crypto.randomUUID()}-${file.name}`
-    const { error: upErr } = await sb.storage.from(BUCKET).upload(path, file, {
-      contentType: file.type || 'application/octet-stream',
-    })
-    if (upErr) throw new Error(upErr.message)
+  async uploadFile({
+    classNum, subject, chapter, file, files, user, fileType, category, paperYear,
+    examType, worksheetNo,
+  }) {
+    // `files` holds every page in order; `file` is the single-file shorthand.
+    const list = (files && files.length ? files : [file]).filter(Boolean)
+    if (!list.length) throw new Error('No file to upload.')
+
+    const uploaded = []
+    for (const f of list) {
+      const path = `class-${classNum}/${slugify(subject)}/${crypto.randomUUID()}-${f.name}`
+      const { error: upErr } = await sb.storage.from(BUCKET).upload(path, f, {
+        contentType: f.type || 'application/octet-stream',
+      })
+      if (upErr) {
+        // Don't leave half an upload behind if a later page fails.
+        if (uploaded.length) {
+          try { await sb.storage.from(BUCKET).remove(uploaded.map((p) => p.path)) } catch { /* best effort */ }
+        }
+        throw new Error(upErr.message)
+      }
+      uploaded.push({ path, name: f.name, size: f.size })
+    }
+
+    const first = list[0]
     const { data, error } = await sb.from('files').insert({
       class_num: Number(classNum), subject, chapter: chapter.trim(),
-      file_name: file.name, file_type: fileType, size: file.size,
-      storage_path: path, uploaded_by_user_id: user.uid, uploader_name: user.profile.name,
+      category: category || 'worksheet', paper_year: paperYear || null,
+      exam_type: examType || null, worksheet_no: worksheetNo || null,
+      file_name: first.name, file_type: fileType,
+      size: list.reduce((n, f) => n + (f.size || 0), 0),
+      storage_path: uploaded[0].path,
+      page_count: uploaded.length,
+      pages: uploaded.length > 1 ? uploaded : null,
+      uploaded_by_user_id: user.uid, uploader_name: user.profile.name,
       view_count: 0, download_count: 0,
     }).select().single()
-    if (error) throw new Error(error.message)
+    if (error) {
+      try { await sb.storage.from(BUCKET).remove(uploaded.map((p) => p.path)) } catch { /* best effort */ }
+      throw new Error(error.message)
+    }
     return normFile(data)
   },
 
-  async listFiles(classNum, subject) {
+  async listFiles(classNum, subject, category = 'worksheet') {
     const { data } = await sb.from('files').select('*')
       .eq('class_num', Number(classNum)).eq('subject', subject)
       .order('created_at', { ascending: false })
-    return (data || []).map(normFile)
+    return (data || []).map(normFile).filter((f) => f.category === category)
   },
 
   async getFile(id) {
@@ -274,6 +312,14 @@ export const supabaseBackend = {
     return data.publicUrl
   },
 
+  // Public URLs for every page, in order. Single-page files return one URL.
+  async getPageUrls(record) {
+    const paths = record.pages?.length
+      ? record.pages.map((p) => p.path)
+      : [record.storagePath]
+    return paths.map((p) => sb.storage.from(BUCKET).getPublicUrl(p).data.publicUrl)
+  },
+
   async registerView(id) {
     await sb.rpc('increment_file_counter', { p_file_id: id, p_column: 'view_count' })
       .then(({ error }) => { if (error) return this._bumpFallback(id, 'view_count') })
@@ -293,7 +339,10 @@ export const supabaseBackend = {
   },
 
   async deleteFile(record, admin) {
-    try { await sb.storage.from(BUCKET).remove([record.storagePath]) } catch (e) { console.warn(e) }
+    const paths = record.pages?.length
+      ? record.pages.map((p) => p.path)
+      : [record.storagePath]
+    try { await sb.storage.from(BUCKET).remove(paths) } catch (e) { console.warn(e) }
     await sb.from('files').delete().eq('id', record.id)
     await sb.from('reports').update({ status: 'resolved' }).eq('file_id', record.id).eq('status', 'open')
     await writeAudit(admin, `Deleted file "${record.fileName}" (Class ${record.classNum} · ${record.subject})`, { targetFileId: record.id })

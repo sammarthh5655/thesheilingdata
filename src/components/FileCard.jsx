@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatDate, formatBytes } from '../config.js'
+import { formatDate, formatBytes, examTypeLabel } from '../config.js'
 
 const TYPE_LABEL = {
   image: 'IMG', pdf: 'PDF', document: 'DOC', presentation: 'PPT', other: 'FILE',
@@ -13,7 +13,11 @@ export default function FileCard({ file, bookmarked, onToggleBookmark, onReport,
         <Link to={`/file/${file.id}`} className="file-name">{file.fileName}</Link>
         <div className="file-meta">
           {showLocation && <span>Class {file.classNum} · {file.subject}</span>}
-          {file.chapter && <span>Ch: {file.chapter}</span>}
+          {examTypeLabel(file.examType) && <span>{examTypeLabel(file.examType)}</span>}
+          {file.paperYear && <span>Year: {file.paperYear}</span>}
+          {file.worksheetNo && file.category !== 'question_paper' && <span>WS {file.worksheetNo}</span>}
+          {file.chapter && <span>{file.category === 'question_paper' ? file.chapter : `Ch: ${file.chapter}`}</span>}
+          {file.pageCount > 1 && <span title="Pages">▤ {file.pageCount} pages</span>}
           <span>
             by <Link to={`/teacher/${file.uploadedByUserId}`}>{file.uploaderName}</Link>
           </span>

@@ -36,6 +36,44 @@ export const CLASSES = {
 
 export const CLASS_NUMBERS = [6, 7, 8, 9, 10]
 
+// ---------------------------------------------------------------------------
+// File categories — worksheets vs previous-year question papers.
+// Files without a category (older uploads) are treated as worksheets.
+// ---------------------------------------------------------------------------
+export const CATEGORY_WORKSHEET = 'worksheet'
+export const CATEGORY_QUESTION_PAPER = 'question_paper'
+
+// Academic-year labels for question papers, newest first: "2025-26", ...
+export function paperYears() {
+  const now = new Date()
+  // Academic year starts in April; before April we're still in last year's session.
+  const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const years = []
+  for (let y = startYear; y >= startYear - 14; y--) {
+    years.push(`${y}-${String((y + 1) % 100).padStart(2, '0')}`)
+  }
+  return years
+}
+
+// ---------------------------------------------------------------------------
+// Examination types used by the school, in the order they fall in the year.
+// "marks" lists the maximum marks each is normally set for — it is what lets
+// auto-detection read "M.M.: 25" off a paper and narrow down which exam it is.
+// ---------------------------------------------------------------------------
+export const EXAM_TYPES = [
+  { id: 'assignment_1', label: '1st Assignment', marks: [10] },
+  { id: 'assignment_2', label: '2nd Assignment', marks: [10] },
+  { id: 'po_1', label: '1st PO', marks: [20] },
+  { id: 'po_2', label: '2nd PO', marks: [20, 25] },
+  { id: 'half_yearly', label: 'Half Yearly', marks: [80] },
+  { id: 'finals', label: 'Finals', marks: [80] },
+]
+
+export const EXAM_TYPE_IDS = EXAM_TYPES.map((e) => e.id)
+
+export const examTypeLabel = (id) =>
+  EXAM_TYPES.find((e) => e.id === id)?.label || null
+
 export const slugify = (s) => s.toLowerCase().replace(/\s+/g, '-')
 
 export const subjectFromSlug = (classNum, slug) =>

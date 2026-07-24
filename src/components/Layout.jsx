@@ -9,12 +9,33 @@ import { ADMIN_PATH } from '../config.js'
 const SECRET_TAPS = 5
 const SECRET_WINDOW_MS = 2000
 
+const NAV_ITEMS = [
+  { to: '/classes', glyph: '▤', label: 'Classes' },
+  { to: '/question-bank', glyph: '❒', label: 'Question Bank' },
+  { to: '/upload', glyph: '⬆', label: 'Upload' },
+  { to: '/assistant', glyph: '✦', label: 'AI Assistant' },
+  { to: '/bookmarks', glyph: '★', label: 'Bookmarks' },
+  { to: '/profile', glyph: '◍', label: 'Profile' },
+  { to: '/settings', glyph: '⚙', label: 'Settings' },
+]
+
 export default function Layout() {
   const { isSignedIn, isVerified, user } = useAuth()
   const { theme, toggle } = useTheme()
   const navigate = useNavigate()
   const [q, setQ] = useState('')
+  const [navCollapsed, setNavCollapsed] = useState(
+    () => localStorage.getItem('tsd:sidenav') === 'collapsed'
+  )
   const tapRef = useRef({ count: 0, last: 0 })
+
+  const toggleNav = () => {
+    setNavCollapsed((c) => {
+      const next = !c
+      localStorage.setItem('tsd:sidenav', next ? 'collapsed' : 'open')
+      return next
+    })
+  }
 
   const onSearch = (e) => {
     e.preventDefault()
@@ -56,13 +77,11 @@ export default function Layout() {
             </form>
           )}
 
-          <nav className="site-nav" aria-label="Main">
+          <nav className="site-nav" aria-label="Account">
             {isSignedIn ? (
-              <>
-                <NavLink to="/classes">Classes</NavLink>
-                <NavLink to="/bookmarks">Bookmarks</NavLink>
-                <NavLink to="/profile">{user?.profile?.name?.split(' ')[0] || 'Profile'}</NavLink>
-              </>
+              <span className="header-user">
+                Hi, {user?.profile?.name?.split(' ')[0] || 'there'}
+              </span>
             ) : (
               <>
                 <NavLink to="/login">Sign in</NavLink>
@@ -99,9 +118,40 @@ export default function Layout() {
         </div>
       )}
 
-      <main className="main-content">
-        <Outlet />
-      </main>
+      <div className={isSignedIn ? 'app-shell' : 'app-shell no-side'}>
+        {isSignedIn && (
+          <aside className={navCollapsed ? 'side-nav collapsed' : 'side-nav'} aria-label="Main">
+            <button
+              className="side-collapse"
+              onClick={toggleNav}
+              aria-label={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {navCollapsed ? '»' : '«'}
+            </button>
+            <nav>
+              {NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className="side-link"
+                  title={navCollapsed ? item.label : undefined}
+                >
+                  <span className="side-glyph" aria-hidden="true">{item.glyph}</span>
+                  <span className="side-label">{item.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+            <div className="side-foot-note">
+              Classes 6–10 · Worksheets<br />&amp; Question Papers
+            </div>
+          </aside>
+        )}
+
+        <main className="main-content">
+          <Outlet />
+        </main>
+      </div>
 
       <footer className="site-footer">
         <div className="rule" aria-hidden="true" />

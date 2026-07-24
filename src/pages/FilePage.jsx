@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { slugify, formatBytes, formatDateTime, CLASSES, CLASS_NUMBERS } from '../config.js'
+import { slugify, formatBytes, formatDateTime, CLASSES, CLASS_NUMBERS, examTypeLabel } from '../config.js'
 import { backend } from '../backend/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import Spinner from '../components/Spinner.jsx'
@@ -14,7 +14,8 @@ export default function FilePage() {
   const navigate = useNavigate()
 
   const [file, setFile] = useState(undefined) // undefined = loading, null = missing
-  const [url, setUrl] = useState(null)
+  const [urls, setUrls] = useState([])        // one entry per page
+  const [page, setPage] = useState(0)
   const [bookmarked, setBookmarked] = useState(false)
   const [reporting, setReporting] = useState(false)
   const [moveTo, setMoveTo] = useState(null) // {classNum, subject} while move UI open
@@ -37,8 +38,10 @@ export default function FilePage() {
       if (alive) setBookmarked(bm.includes(fileId))
       if (rec.fileType === 'image' || rec.fileType === 'pdf') {
         try {
-          const u = await backend.getFileUrl(rec)
-          if (alive) setUrl(u)
+          const list = backend.getPageUrls
+            ? await backend.getPageUrls(rec)
+            : [await backend.getFileUrl(rec)]
+          if (alive) { setUrls(list.filter(Boolean)); setPage(0) }
         } catch { /* preview unavailable; download still offered */ }
       }
     })().catch(() => alive && setFile(null))
@@ -54,13 +57,23 @@ export default function FilePage() {
     )
   }
 
+  const pageCount = Math.max(file.pageCount || 1, urls.length)
+  const url = urls[page] || null
+
+  // For a multi-page entry this downloads the page you are looking at, so the
+  // button always matches what is on screen.
   const download = async () => {
     await backend.registerDownload(file.id)
     setFile((f) => ({ ...f, downloadCount: (f.downloadCount || 0) + 1 }))
     const u = url || (await backend.getFileUrl(file))
+    const suffix = pageCount > 1 ? ` (page ${page + 1})` : ''
+    const dot = file.fileName.lastIndexOf('.')
+    const name = suffix && dot > 0
+      ? `${file.fileName.slice(0, dot)}${suffix}${file.fileName.slice(dot)}`
+      : file.fileName + suffix
     const a = document.createElement('a')
     a.href = u
-    a.download = file.fileName
+    a.download = name
     a.target = '_blank'
     a.rel = 'noopener'
     document.body.appendChild(a)
@@ -94,19 +107,48 @@ export default function FilePage() {
     <>
       <div className="page-head">
         <nav className="breadcrumbs" aria-label="Breadcrumb">
-          <Link to="/classes">Classes</Link>
-          <span className="sep">/</span>
-          <Link to={`/classes/${file.classNum}`}>Class {file.classNum}</Link>
-          <span className="sep">/</span>
-          <Link to={`/classes/${file.classNum}/${slugify(file.subject)}`}>{file.subject}</Link>
-          <span className="sep">/</span>
-          <span>{file.fileName}</span>
+          {(() => {
+            const base = file.category === 'question_paper' ? '/question-bank' : '/classes'
+            const label = file.category === 'question_paper' ? 'Question Bank' : 'Classes'
+            return (
+              <>
+                <Link to={base}>{label}</Link>
+                <span className="sep">/</span>
+                <Link to={`${base}/${file.classNum}`}>Class {file.classNum}</Link>
+                <span className="sep">/</span>
+                <Link to={`${base}/${file.classNum}/${slugify(file.subject)}`}>{file.subject}</Link>
+                <span className="sep">/</span>
+                <span>{file.fileName}</span>
+              </>
+            )
+          })()}
         </nav>
         <h1 style={{ wordBreak: 'break-word' }}>{file.fileName}</h1>
       </div>
 
       <div className="file-detail">
         <div className="preview-pane">
+          {pageCount > 1 && (
+            <div className="pager" role="group" aria-label="Pages">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                ‹ Prev
+              </button>
+              <span className="pager-label">Page {page + 1} of {pageCount}</span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+              >
+                Next ›
+              </button>
+            </div>
+          )}
           {file.fileType === 'image' && url ? (
             <img src={url} alt={file.fileName} />
           ) : file.fileType === 'pdf' && url ? (
@@ -128,6 +170,12 @@ export default function FilePage() {
             <button className="btn btn-primary btn-block" onClick={download}>
               Download
             </button>
+            <button
+              className="btn btn-block btn-ai"
+              onClick={() => navigate(`/assistant?file=${file.id}`)}
+            >
+              ✦ Ask AI about this
+            </button>
             <button className="btn btn-block" onClick={toggleBookmark}>
               {bookmarked ? '★ Bookmarked' : '☆ Bookmark'}
             </button>
@@ -142,10 +190,32 @@ export default function FilePage() {
           </div>
 
           <dl>
+            <dt>Type</dt>
+            <dd>{file.category === 'question_paper' ? 'Question paper' : 'Worksheet'}</dd>
             <dt>Class &amp; subject</dt>
             <dd>Class {file.classNum} · {file.subject}</dd>
+            {file.category === 'question_paper' && (
+              <>
+                <dt>Examination</dt>
+                <dd>{examTypeLabel(file.examType) || '—'}</dd>
+                <dt>Year</dt>
+                <dd>{file.paperYear || '—'}</dd>
+              </>
+            )}
+            {file.category !== 'question_paper' && file.worksheetNo && (
+              <>
+                <dt>Worksheet no.</dt>
+                <dd>{file.worksheetNo}</dd>
+              </>
+            )}
             <dt>Chapter</dt>
             <dd>{file.chapter || '—'}</dd>
+            {pageCount > 1 && (
+              <>
+                <dt>Pages</dt>
+                <dd>{pageCount}</dd>
+              </>
+            )}
             <dt>Uploaded by</dt>
             <dd><Link to={`/teacher/${file.uploadedByUserId}`}>{file.uploaderName}</Link></dd>
             <dt>Uploaded</dt>

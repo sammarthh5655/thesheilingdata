@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { subjectFromSlug, CLASSES } from '../config.js'
+import { subjectFromSlug, CLASSES, CATEGORY_QUESTION_PAPER } from '../config.js'
 import { backend } from '../backend/index.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import FileCard from '../components/FileCard.jsx'
@@ -10,24 +10,28 @@ import UploadPanel from '../components/UploadPanel.jsx'
 import ReportDialog from '../components/ReportDialog.jsx'
 import NotFound from './NotFound.jsx'
 
-export default function SubjectPage() {
+// Also serves the Question Bank (category prop). Worksheets group by chapter;
+// question papers group by academic year.
+export default function SubjectPage({ category = 'worksheet' }) {
   const { classNumber, subjectSlug } = useParams()
   const subject = CLASSES[classNumber] ? subjectFromSlug(classNumber, subjectSlug) : null
   const { user, canUpload } = useAuth()
+  const isQB = category === CATEGORY_QUESTION_PAPER
+  const base = isQB ? '/question-bank' : '/classes'
 
   const [files, setFiles] = useState(null)
   const [bookmarks, setBookmarks] = useState(new Set())
-  const [chapterFilter, setChapterFilter] = useState('')
+  const [groupFilter, setGroupFilter] = useState('')
   const [reporting, setReporting] = useState(null)
 
   const load = useCallback(async () => {
     const [list, bm] = await Promise.all([
-      backend.listFiles(classNumber, subject),
+      backend.listFiles(classNumber, subject, category),
       backend.listBookmarkIds(user.uid),
     ])
     setFiles(list)
     setBookmarks(new Set(bm))
-  }, [classNumber, subject, user.uid])
+  }, [classNumber, subject, category, user.uid])
 
   useEffect(() => {
     if (!subject) return
@@ -47,76 +51,80 @@ export default function SubjectPage() {
     })
   }
 
-  const chapters = files
-    ? [...new Set(files.map((f) => f.chapter || 'Uncategorized'))].sort((a, b) =>
-        a.localeCompare(b, undefined, { numeric: true }))
+  // Group key: chapter for worksheets, academic year for question papers.
+  const keyOf = (f) => (isQB ? f.paperYear || 'Unknown year' : f.chapter || 'Uncategorized')
+  const groups = files
+    ? [...new Set(files.map(keyOf))].sort((a, b) =>
+        isQB ? b.localeCompare(a, undefined, { numeric: true })
+             : a.localeCompare(b, undefined, { numeric: true }))
     : []
   const visible = files
-    ? chapterFilter
-      ? files.filter((f) => (f.chapter || 'Uncategorized') === chapterFilter)
-      : files
+    ? groupFilter ? files.filter((f) => keyOf(f) === groupFilter) : files
     : []
-  const grouped = chapters
-    .filter((c) => !chapterFilter || c === chapterFilter)
-    .map((c) => ({
-      chapter: c,
-      items: visible.filter((f) => (f.chapter || 'Uncategorized') === c),
-    }))
+  const grouped = groups
+    .filter((g) => !groupFilter || g === groupFilter)
+    .map((g) => ({ group: g, items: visible.filter((f) => keyOf(f) === g) }))
     .filter((g) => g.items.length)
 
   return (
     <>
       <div className="page-head">
         <nav className="breadcrumbs" aria-label="Breadcrumb">
-          <Link to="/classes">Classes</Link>
+          <Link to={base}>{isQB ? 'Question Bank' : 'Classes'}</Link>
           <span className="sep">/</span>
-          <Link to={`/classes/${classNumber}`}>Class {classNumber}</Link>
+          <Link to={`${base}/${classNumber}`}>Class {classNumber}</Link>
           <span className="sep">/</span>
           <span>{subject}</span>
         </nav>
-        <h1>{subject}</h1>
+        <h1>{subject}{isQB ? ' — Question Papers' : ''}</h1>
         <p className="sub">
-          Class {classNumber}{files && ` · ${files.length} file${files.length === 1 ? '' : 's'}`}
+          Class {classNumber}
+          {files && ` · ${files.length} ${isQB ? 'paper' : 'file'}${files.length === 1 ? '' : 's'}`}
         </p>
       </div>
 
       {canUpload && (
-        <UploadPanel classNum={Number(classNumber)} subject={subject} onUploaded={load} />
+        <UploadPanel
+          classNum={Number(classNumber)}
+          subject={subject}
+          category={category}
+          onUploaded={load}
+        />
       )}
 
       {files === null ? (
-        <div className="page-loading"><Spinner label="Loading worksheets" /></div>
+        <div className="page-loading"><Spinner label={isQB ? 'Loading question papers' : 'Loading worksheets'} /></div>
       ) : files.length === 0 ? (
-        <EmptyState glyph="✎" title="No worksheets uploaded yet for this subject">
-          When a teacher uploads material for {subject}, it will appear here.
+        <EmptyState glyph="✎" title={isQB ? 'No question papers uploaded yet for this subject' : 'No worksheets uploaded yet for this subject'}>
+          When a teacher uploads {isQB ? 'previous-year papers' : 'material'} for {subject}, it will appear here.
         </EmptyState>
       ) : (
         <>
-          {chapters.length > 1 && (
-            <div className="chip-row" role="group" aria-label="Filter by chapter">
+          {groups.length > 1 && (
+            <div className="chip-row" role="group" aria-label={isQB ? 'Filter by year' : 'Filter by chapter'}>
               <button
-                className={chapterFilter === '' ? 'chip active' : 'chip'}
-                onClick={() => setChapterFilter('')}
+                className={groupFilter === '' ? 'chip active' : 'chip'}
+                onClick={() => setGroupFilter('')}
               >
-                All chapters
+                {isQB ? 'All years' : 'All chapters'}
               </button>
-              {chapters.map((c) => (
+              {groups.map((g) => (
                 <button
-                  key={c}
-                  className={chapterFilter === c ? 'chip active' : 'chip'}
-                  onClick={() => setChapterFilter(chapterFilter === c ? '' : c)}
+                  key={g}
+                  className={groupFilter === g ? 'chip active' : 'chip'}
+                  onClick={() => setGroupFilter(groupFilter === g ? '' : g)}
                 >
-                  {c}
+                  {g}
                 </button>
               ))}
             </div>
           )}
 
-          {grouped.map(({ chapter, items }) => (
-            <section key={chapter} className="chapter-group">
+          {grouped.map(({ group, items }) => (
+            <section key={group} className="chapter-group">
               <h2 className="chapter-title">
-                {chapter}
-                <span className="tally">{items.length} file{items.length === 1 ? '' : 's'}</span>
+                {group}
+                <span className="tally">{items.length} {isQB ? 'paper' : 'file'}{items.length === 1 ? '' : 's'}</span>
               </h2>
               <div className="file-list">
                 {items.map((f) => (

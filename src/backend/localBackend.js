@@ -139,6 +139,8 @@ export const localBackend = {
 
   refreshAuth() { emit() },
 
+  async getAccessToken() { return null }, // no server auth in local mode
+
   async signUp({ name, email, password }) {
     email = email.trim().toLowerCase()
     const db = loadDb()
@@ -279,14 +281,30 @@ export const localBackend = {
   },
 
   // --- Files ---------------------------------------------------------------
-  async uploadFile({ classNum, subject, chapter, file, user, fileType }) {
+  async uploadFile({
+    classNum, subject, chapter, file, files, user, fileType, category, paperYear,
+    examType, worksheetNo,
+  }) {
+    const list = (files && files.length ? files : [file]).filter(Boolean)
+    if (!list.length) throw new Error('No file to upload.')
     const id = uid()
-    await idbPut(id, file)
+    // Page 1 keeps the record id as its key so existing lookups still work;
+    // later pages are stored under "<id>:<n>".
+    const pages = []
+    for (let i = 0; i < list.length; i++) {
+      const key = i === 0 ? id : `${id}:${i}`
+      await idbPut(key, list[i])
+      pages.push({ path: key, name: list[i].name, size: list[i].size })
+    }
     const db = loadDb()
     const record = {
       id, classNum: Number(classNum), subject, chapter: chapter.trim(),
-      fileName: file.name, fileType, size: file.size,
+      category: category || 'worksheet', paperYear: paperYear || null,
+      examType: examType || null, worksheetNo: worksheetNo || null,
+      fileName: list[0].name, fileType,
+      size: list.reduce((n, f) => n + (f.size || 0), 0),
       storagePath: `local/${id}`, storageUrl: null,
+      pageCount: pages.length, pages: pages.length > 1 ? pages : null,
       uploadedByUserId: user.uid, uploaderName: user.profile.name,
       uploadedAt: now(), viewCount: 0, downloadCount: 0,
     }
@@ -295,9 +313,11 @@ export const localBackend = {
     return record
   },
 
-  async listFiles(classNum, subject) {
+  async listFiles(classNum, subject, category = 'worksheet') {
     return loadDb().files
-      .filter((f) => f.classNum === Number(classNum) && f.subject === subject)
+      .filter((f) =>
+        f.classNum === Number(classNum) && f.subject === subject &&
+        (f.category || 'worksheet') === category)
       .sort((a, b) => b.uploadedAt - a.uploadedAt)
   },
 
@@ -321,6 +341,17 @@ export const localBackend = {
     return URL.createObjectURL(blob)
   },
 
+  async getPageUrls(record) {
+    const keys = record.pages?.length ? record.pages.map((p) => p.path) : [record.id]
+    const urls = []
+    for (const k of keys) {
+      const blob = await idbGet(k)
+      if (blob) urls.push(URL.createObjectURL(blob))
+    }
+    if (!urls.length) throw new Error('File data not found in this browser.')
+    return urls
+  },
+
   async registerView(id) {
     const db = loadDb()
     const f = db.files.find((x) => x.id === id)
@@ -334,7 +365,9 @@ export const localBackend = {
   },
 
   async deleteFile(record, admin) {
-    await idbDelete(record.id)
+    for (const k of record.pages?.length ? record.pages.map((p) => p.path) : [record.id]) {
+      await idbDelete(k)
+    }
     const db = loadDb()
     db.files = db.files.filter((f) => f.id !== record.id)
     db.reports = db.reports.map((r) =>

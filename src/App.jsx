@@ -12,6 +12,10 @@ import VerifyEmail from './pages/VerifyEmail.jsx'
 import Classes from './pages/Classes.jsx'
 import ClassPage from './pages/ClassPage.jsx'
 import SubjectPage from './pages/SubjectPage.jsx'
+import Assistant from './pages/Assistant.jsx'
+import Upload from './pages/Upload.jsx'
+import Settings from './pages/Settings.jsx'
+import { CATEGORY_QUESTION_PAPER } from './config.js'
 import FilePage from './pages/FilePage.jsx'
 import SearchPage from './pages/SearchPage.jsx'
 import Bookmarks from './pages/Bookmarks.jsx'
@@ -67,6 +71,12 @@ export default function App() {
         <Route path="/classes" element={<Protected><Classes /></Protected>} />
         <Route path="/classes/:classNumber" element={<Protected><ClassPage /></Protected>} />
         <Route path="/classes/:classNumber/:subjectSlug" element={<Protected><SubjectPage /></Protected>} />
+        <Route path="/question-bank" element={<Protected><Classes category={CATEGORY_QUESTION_PAPER} /></Protected>} />
+        <Route path="/question-bank/:classNumber" element={<Protected><ClassPage category={CATEGORY_QUESTION_PAPER} /></Protected>} />
+        <Route path="/question-bank/:classNumber/:subjectSlug" element={<Protected><SubjectPage category={CATEGORY_QUESTION_PAPER} /></Protected>} />
+        <Route path="/assistant" element={<Protected><Assistant /></Protected>} />
+        <Route path="/upload" element={<Protected><Upload /></Protected>} />
+        <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/file/:fileId" element={<Protected><FilePage /></Protected>} />
         <Route path="/search" element={<Protected><SearchPage /></Protected>} />
         <Route path="/bookmarks" element={<Protected><Bookmarks /></Protected>} />

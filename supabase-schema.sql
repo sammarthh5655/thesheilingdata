@@ -32,6 +32,8 @@ CREATE TABLE public.files (
   class_num INT NOT NULL,
   subject TEXT NOT NULL,
   chapter TEXT,
+  category TEXT NOT NULL DEFAULT 'worksheet',  -- 'worksheet' | 'question_paper'
+  paper_year TEXT,                             -- e.g. '2025-26' (question papers only)
   file_name TEXT NOT NULL,
   file_type TEXT,
   size BIGINT,

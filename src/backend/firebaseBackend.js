@@ -51,7 +51,11 @@ function normalizeUser(id, d) {
 
 function normalizeFile(id, d) {
   if (!d) return null
-  return { id, ...d, uploadedAt: ts(d.uploadedAt) }
+  return {
+    id, ...d,
+    category: d.category || 'worksheet', paperYear: d.paperYear || null,
+    uploadedAt: ts(d.uploadedAt),
+  }
 }
 
 async function logEvent({ userId, email, type, success }) {
@@ -116,6 +120,10 @@ export const firebaseBackend = {
   async refreshAuth() {
     await auth.currentUser?.reload()
     // onAuthStateChanged does not re-fire on reload; callers re-fetch via getUser.
+  },
+
+  async getAccessToken() {
+    return auth.currentUser ? auth.currentUser.getIdToken() : null
   },
 
   async signUp({ name, email, password }) {
@@ -230,16 +238,29 @@ export const firebaseBackend = {
   },
 
   // --- Files ---------------------------------------------------------------
-  async uploadFile({ classNum, subject, chapter, file, user, fileType }) {
+  async uploadFile({
+    classNum, subject, chapter, file, files, user, fileType, category, paperYear,
+    examType, worksheetNo,
+  }) {
+    const list = (files && files.length ? files : [file]).filter(Boolean)
+    if (!list.length) throw new Error('No file to upload.')
     const id = crypto.randomUUID()
-    const path = `worksheets/class-${classNum}/${slugify(subject)}/${id}-${file.name}`
-    const ref = storageRef(storage, path)
-    await uploadBytes(ref, file)
-    const url = await getDownloadURL(ref)
+    const pages = []
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i]
+      const path = `worksheets/class-${classNum}/${slugify(subject)}/${id}-${i}-${f.name}`
+      const ref = storageRef(storage, path)
+      await uploadBytes(ref, f)
+      pages.push({ path, url: await getDownloadURL(ref), name: f.name, size: f.size })
+    }
     const record = {
       classNum: Number(classNum), subject, chapter: chapter.trim(),
-      fileName: file.name, fileType, size: file.size,
-      storagePath: path, storageUrl: url,
+      category: category || 'worksheet', paperYear: paperYear || null,
+      examType: examType || null, worksheetNo: worksheetNo || null,
+      fileName: list[0].name, fileType,
+      size: list.reduce((n, f) => n + (f.size || 0), 0),
+      storagePath: pages[0].path, storageUrl: pages[0].url,
+      pageCount: pages.length, pages: pages.length > 1 ? pages : null,
       uploadedByUserId: user.uid, uploaderName: user.profile.name,
       uploadedAt: serverTimestamp(), viewCount: 0, downloadCount: 0,
     }
@@ -247,7 +268,7 @@ export const firebaseBackend = {
     return { id: docRef.id, ...record, uploadedAt: Date.now() }
   },
 
-  async listFiles(classNum, subject) {
+  async listFiles(classNum, subject, category = 'worksheet') {
     const q = query(
       collection(db, 'files'),
       where('classNum', '==', Number(classNum)),
@@ -256,6 +277,7 @@ export const firebaseBackend = {
     const snap = await getDocs(q)
     return snap.docs
       .map((d) => normalizeFile(d.id, d.data()))
+      .filter((f) => f.category === category)
       .sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0))
   },
 
@@ -283,6 +305,12 @@ export const firebaseBackend = {
     return record.storageUrl
   },
 
+  async getPageUrls(record) {
+    return record.pages?.length
+      ? record.pages.map((p) => p.url)
+      : [record.storageUrl]
+  },
+
   async registerView(id) {
     try { await updateDoc(doc(db, 'files', id), { viewCount: increment(1) }) } catch {}
   },
@@ -292,8 +320,10 @@ export const firebaseBackend = {
   },
 
   async deleteFile(record, admin) {
-    try { await deleteObject(storageRef(storage, record.storagePath)) } catch (e) {
-      console.warn('storage delete failed', e)
+    for (const p of record.pages?.length ? record.pages.map((x) => x.path) : [record.storagePath]) {
+      try { await deleteObject(storageRef(storage, p)) } catch (e) {
+        console.warn('storage delete failed', e)
+      }
     }
     await deleteDoc(doc(db, 'files', record.id))
     // Close any open reports pointing at the removed file.
